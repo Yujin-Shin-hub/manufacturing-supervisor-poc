@@ -1,0 +1,26 @@
+# LLM calls (Qwen via local Ollama, OpenAI-compatible API)
+# Model itself is NOT a pip package: ollama pull qwen2.5:7b
+openai
+pydantic
+python-dotenv
+
+# Data processing (all numbers computed by code, not LLM)
+pandas
+
+# Dashboard (see docs/dashboard.md)
+fastapi
+uvicorn
+sse-starlette
+
+# Sensor stream via MQTT (see docs/sensor-stream.md, roadmap stage 10-11)
+# Broker is NOT a pip package: install Mosquitto from mosquitto.org
+paho-mqtt
+
+# Dev / test
+pytest
+jupyter
+
+# --- Future: Explanation RAG extension (not needed now) ---
+# Embedding: ollama pull bge-m3 (no pip install)
+# or uncomment below for sentence-transformers("BAAI/bge-m3")
+# sentence-transformers

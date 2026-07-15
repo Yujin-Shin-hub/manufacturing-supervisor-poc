@@ -1,0 +1,51 @@
+/*
+작성자  : 신유진
+작성일  : 2026-07-07
+작성 목적: 전역 기본 스타일 — reset 수준의 최소 규칙과 페이지 레이아웃 기반
+변경 이력:
+  - 2026-07-07: 단계 8 최초 작성
+  - 2026-07-07: 다크 테마 전환 — 스크롤바·선택 영역·포커스 링 전역 규칙 추가
+*/
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--ink);
+}
+
+/* 다크 표면 위 스크롤바 (WebKit + Firefox) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+  border: 2px solid var(--bg-panel);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

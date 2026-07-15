@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($conn = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue; if \\($conn\\) { Stop-Process -Id \\($conn.OwningProcess | Select-Object -Unique\\) -Force -Confirm:$false; \"killed uvicorn PID $\\($conn.OwningProcess | Select-Object -Unique\\)\" } else { \"no listener on 8000\" })",
+      "Bash(./venv/Scripts/python.exe -m uvicorn src.server:app --port 8000)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -s \"http://localhost:8000/api/risk-summary\")",
+      "Bash(curl -s \"http://localhost:8000/api/risk-summary?asof=garbage\" -o /dev/null -w \"%{http_code}\")",
+      "Bash(./venv/Scripts/python.exe -m pytest tests/test_supervisor_report.py::test_report_worker_builds_markdown_from_agent_results -q)",
+      "Bash(./venv/Scripts/python.exe -c \"import src.server; print\\('import OK'\\)\")",
+      "Bash(where mosquitto *)",
+      "Read(//c/Program Files/mosquitto/**)",
+      "Bash(sc query *)",
+      "Bash(./venv/Scripts/python.exe -c \"import paho.mqtt; print\\('paho', paho.mqtt.__version__\\)\")",
+      "Bash(./venv/Scripts/python.exe -m pip install -q paho-mqtt)",
+      "Bash(./venv/Scripts/python.exe -c \"import paho.mqtt; print\\('paho ok', paho.mqtt.__version__\\)\")",
+      "Bash(./venv/Scripts/python.exe -m src.sensors.simulator --anomaly temp-drift)",
+      "Bash(curl -s -N -m 4 http://localhost:8000/events)",
+      "Bash(python *)",
+      "Bash(./venv/Scripts/python.exe -m pytest tests -q)"
+    ]
+  }
+}

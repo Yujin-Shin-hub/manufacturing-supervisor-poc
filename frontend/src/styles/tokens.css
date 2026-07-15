@@ -1,0 +1,65 @@
+/*
+작성자  : 신유진
+작성일  : 2026-07-07
+작성 목적: 디자인 토큰 — 색상·폰트 변수의 단일 소스. 컴포넌트는 hex를 직접 쓰지 않고 이 변수만 사용한다
+변경 이력:
+  - 2026-07-07: 단계 8 최초 작성
+  - 2026-07-07: 다크 관제 콘솔 테마로 전면 교체 (팹 그래파이트 표면 + 플라즈마 시안 액센트,
+                상태색은 dataviz 검증 status palette 채택)
+*/
+:root {
+  color-scheme: dark;
+
+  /* 표면 — 청회색 그래파이트 (팹 관제실) */
+  --bg-page: #0a0e15;
+  --bg-panel: #10151f;
+  --bg-raised: #161e2b;
+  --bg-hover: #1b2434;
+  --bg-inset: #0d121b;
+  --border: #1f2937;
+  --border-strong: #2c3950;
+
+  /* 텍스트 */
+  --ink: #e6ecf5;
+  --ink-sub: #a3b0c4;
+  --ink-dim: #66748c;
+
+  /* 액센트 — 에치 챔버 플라즈마 시안 */
+  --accent: #45c4f5;
+  --accent-strong: #8adcff;
+  --accent-dim: #22688c;
+  --accent-soft: rgba(69, 196, 245, 0.12);
+  --accent-glow: rgba(69, 196, 245, 0.55);
+
+  /* 상태색 — dataviz 검증 status palette (다크 표면 3:1 이상, 항상 라벨 동반) */
+  --status-good: #0ca30c;
+  --status-good-soft: rgba(12, 163, 12, 0.14);
+  --status-warning: #fab219;
+  --status-warning-soft: rgba(250, 178, 25, 0.14);
+  --status-serious: #ec835a;
+  --status-serious-soft: rgba(236, 131, 90, 0.14);
+  --status-critical: #d03b3b;
+  --status-critical-strong: #ef6a6a;
+  --status-critical-soft: rgba(208, 59, 59, 0.16);
+
+  /* 타이포그래피 */
+  --font-sans: "Pretendard Variable", "Pretendard", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  /* 노드/Run 상태 색상 매핑 (api-spec 2-2 상태의 단일 소스) */
+  --status-pending-fg: var(--ink-dim);
+  --status-pending-bg: var(--bg-raised);
+  --status-running-fg: var(--accent);
+  --status-running-bg: var(--accent-soft);
+  --status-done-fg: #35c33f; /* status-good을 텍스트용으로 한 단계 밝힌 값 */
+  --status-done-bg: var(--status-good-soft);
+  --status-failed-fg: var(--status-critical-strong);
+  --status-failed-bg: var(--status-critical-soft);
+  --status-skipped-fg: var(--ink-dim);
+  --status-skipped-bg: transparent;
+
+  /* 형태 */
+  --radius-panel: 12px;
+  --radius-control: 8px;
+  --shadow-float: 0 12px 40px rgba(3, 7, 14, 0.6), 0 2px 8px rgba(3, 7, 14, 0.4);
+}
