@@ -4,6 +4,7 @@
 작성 목적: EventBus 로 실행 이벤트를 발행하고 콘솔 로거와 SSE가 공동 구독할 수 있게 한다.
 변경 이력:
   - 2026-07-06: 단계 6 EventBus publish/subscribe, buffer replay, CLI console logger 구현
+  - 2026-07-16: 단계 11 auto_run_triggered 이벤트 추가 (센서 이상 → Supervisor 자동 실행)
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ EventName = Literal[
     "action_escalated",
     "sensor_update",
     "sensor_alert",
+    "auto_run_triggered",
     "error",
     "run_end",
 ]
@@ -141,6 +143,11 @@ class ConsoleEventLogger:
             print(
                 f"[{event.seq:02d}] sensor_alert "
                 f"{data['line']} {data['sensor']} rule={data['rule']}"
+            )
+        elif event.event == "auto_run_triggered":
+            print(
+                f"[{event.seq:02d}] auto_run_triggered "
+                f"{data['line']} cause={data['cause']} query={data['query']}"
             )
         else:
             print(f"[{event.seq:02d}] {event.event}")

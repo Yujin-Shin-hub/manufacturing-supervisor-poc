@@ -114,7 +114,6 @@ uvicorn src.server:app --reload
 - 단계 10 구현: `src/sensors/simulator.py`, `src/sensors/subscriber.py`, `src/sensors/rules.py`
 - FastAPI 연동: `MQTT_ENABLED=true`일 때 서버 startup에서 `factory/#` subscriber 시작
 - SSE 이벤트: `sensor_update`, `sensor_alert`
-- 자동 Supervisor 실행(`auto_run_triggered`)과 쿨다운은 단계 11 범위로 남긴다
 - 센서 패널 구현 (2026-07-15): `frontend/src/components/SensorPanel.vue` +
   `useSensorStream` composable — 라인 6개 카드 × 3종 센서 최신값 + 최근 60초 스파크라인
   (vanilla canvas), sensor_alert 시 카드 경고색 토글. 센서 이벤트 수신 시에만 전용 행이
@@ -124,3 +123,13 @@ uvicorn src.server:app --reload
 - E2E 검증 (2026-07-15): Mosquitto 서비스 + `--anomaly temp-drift` 시뮬레이터로
   Line-2 카드 경고 토글·critical 토스트·sensor_alert 타임라인 수신 확인
   (증빙: reports/dashboard-stage10-sensor-panel.png)
+- 단계 11 구현 (2026-07-16): 센서 이상 → Supervisor 자동 트리거
+  - `rules.py`: `AutoTriggerCooldown`(라인당 5분, 폐기된 트리거는 쿨다운 미소모) +
+    `build_auto_query` 고정 query 템플릿 (판정·문구 모두 코드, LLM 개입 없음)
+  - `server.py`: sensor_alert 구독 → 실행 중이면 폐기, 쿨다운 통과 시 `auto_run_triggered`
+    발행 후 Supervisor를 mode `"auto"`로 실행 (POST /run에는 "auto" 미노출)
+  - 대시보드: 타임라인 run_start mode:"auto"에 "자동 실행" 배지, auto_run_triggered
+    엔트리는 run_start 리셋에서 보존, 알림센터/토스트 연동
+  - E2E 검증 (2026-07-16): temp-drift 데모에서 sensor_alert → auto_run_triggered →
+    run_start(auto) → run_end(done), 5분 쿨다운 뒤 두 번째 자동 트리거까지 확인
+    (증빙: reports/stage11-auto-trigger-events.log)

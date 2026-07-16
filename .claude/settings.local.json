@@ -17,7 +17,14 @@
       "Bash(./venv/Scripts/python.exe -m src.sensors.simulator --anomaly temp-drift)",
       "Bash(curl -s -N -m 4 http://localhost:8000/events)",
       "Bash(python *)",
-      "Bash(./venv/Scripts/python.exe -m pytest tests -q)"
+      "Bash(./venv/Scripts/python.exe -m pytest tests -q)",
+      "Bash(./venv/Scripts/python.exe -m pytest tests/test_stage9_artifacts.py -q)",
+      "Bash(./venv/Scripts/python.exe -m pytest tests/ -q)",
+      "Bash(PATH=/c/Users/SAMSUNG/tools/node-v22.23.1-win-x64:__TRACKED_VAR__ npm run build)",
+      "Bash(MQTT_ENABLED=true ./venv/Scripts/python.exe *)",
+      "Bash(curl *)",
+      "Bash(./venv/Scripts/python.exe -c ' *)",
+      "Bash(./venv/Scripts/python.exe *)"
     ]
   }
 }

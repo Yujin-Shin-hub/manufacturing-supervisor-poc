@@ -8,6 +8,7 @@
  *   - 2026-07-14: run_end에 key_actions/key_actions_total 추가 — 리포트 드로어 고정 컴포넌트용
  *                 구조화 핵심 추천 액션 (api-spec 2-1 동시 갱신)
  *   - 2026-07-14: 단계 10 MQTT 센서 스트림 — sensor_update/sensor_alert 이벤트 타입 추가
+ *   - 2026-07-16: 단계 11 자동 트리거 — auto_run_triggered 이벤트, run_start mode "auto" 추가
  */
 
 /** api-spec 2-1: agent 값은 다음 다섯 개만 허용 */
@@ -45,7 +46,8 @@ export interface EventDataBase {
 }
 
 export interface RunStartData extends EventDataBase {
-  mode: "ask" | "report";
+  /** "auto"는 단계 11 센서 자동 트리거 전용 — 타임라인에 "자동 실행" 배지로 구분 표시 */
+  mode: "ask" | "report" | "auto";
   asof: string;
   query?: string | null;
 }
@@ -153,6 +155,13 @@ export interface SensorAlertData extends EventDataBase {
   unit: string;
 }
 
+/** api-spec 2-1 단계 11: sensor_alert가 쿨다운을 통과해 Supervisor 자동 실행이 시작될 때 */
+export interface AutoRunTriggeredData extends EventDataBase {
+  cause: "sensor_alert";
+  line: string;
+  query: string;
+}
+
 export interface ErrorData extends EventDataBase {
   agent: AgentName | null;
   message: string;
@@ -201,6 +210,7 @@ export interface EventDataMap {
   action_escalated: ActionEscalatedData;
   sensor_update: SensorUpdateData;
   sensor_alert: SensorAlertData;
+  auto_run_triggered: AutoRunTriggeredData;
   error: ErrorData;
   run_end: RunEndData;
 }
@@ -222,6 +232,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "action_escalated",
   "sensor_update",
   "sensor_alert",
+  "auto_run_triggered",
   "error",
   "run_end",
 ] as const;

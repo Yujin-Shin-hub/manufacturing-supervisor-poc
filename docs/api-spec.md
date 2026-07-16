@@ -2,7 +2,7 @@
 
 ```
 작성자 : 신유진
-작성 목적 : 대시보드·CLI가 사용하는 API 계약 정의. 서버(단계 7)·대시보드(단계 8) 구현 기준 문서
+작성 목적 : 대시보드·CLI가 사용하는 API 계약 정의. 구현 기준 문서
 필드 원칙 : 데이터 조회 API는 data/*.csv에 실존하는 컬럼만 사용한다.
            승인/거절·재추천 같은 workflow 필드는 이 문서에 정의된 payload에서만 추가할 수 있다.
 ```
@@ -37,7 +37,7 @@
 
 | 필드 | 타입 | 규칙 |
 |---|---|---|
-| mode | str | `"ask"` 또는 `"report"` (`"auto"`는 단계 11에서 센서 트리거 전용으로 추가 예약) |
+| mode | str | `"ask"` 또는 `"report"`. `"auto"`는 센서 자동 트리거 전용으로 서버 내부에서만 사용하며 POST /run으로는 받지 않는다 (단계 11) |
 | asof | str | 기준시각. 생략 시 서버가 데이터 내 최신 `work_event_log.event_time` 기준으로 결정 |
 | query | str? | mode="ask"일 때 필수, "report"일 때 무시 |
 | llm_provider | str? | `"auto"` \| `"qwen"` \| `"openai"`. 생략 시 환경변수 `LLM_PROVIDER`, 그것도 없으면 `"auto"` |
@@ -293,7 +293,7 @@ data: {"seq": 3, "ts": "2026-04-15 10:00:02", "agent": "dispatching"}
 
 | event | data 필드 | 발행 시점 |
 |---|---|---|
-| `run_start` | `mode`, `asof`, `query`(ask만) | POST /run 수리 직후 |
+| `run_start` | `mode`("ask"\|"report"\|"auto"), `asof`, `query`(ask/auto만) | POST /run 수리 직후 또는 자동 트리거 직후 |
 | `llm_provider_selected` | `requested_provider`, `active_provider`, `fallback_used`, `model_name` | LLM 호출 provider가 확정됐을 때 |
 | `routing_decision` | `target_agents`(agent 배열), `execution_order`("sequential"), `reason` | Routing Agent 응답 검증 통과 후 |
 | `agent_start` | `agent` | Worker 실행 직전 |
@@ -307,6 +307,7 @@ data: {"seq": 3, "ts": "2026-04-15 10:00:02", "agent": "dispatching"}
 | `action_escalated` | `action_id`, `schedule_id`, `escalation_level`, `escalation_reason` | 에스컬레이션 발생 시 |
 | `sensor_update` | `line`, `sensor`, `value`(float), `unit`, `observed_ts` | MQTT `factory/#` payload 검증 후 |
 | `sensor_alert` | `line`, `sensor`, `rule`, `values`(float 배열), `unit` | 동일 라인·센서가 60초 내 3회 연속 임계 초과 시 |
+| `auto_run_triggered` | `cause`("sensor_alert"), `line`, `query`(고정 템플릿) | sensor_alert가 쿨다운(라인당 5분)을 통과해 자동 실행이 시작될 때 |
 | `error` | `agent`(특정 불가 시 null), `message`, `recoverable`(bool) | 예외 발생 시 |
 | `run_end` | `status`("done"\|"failed"), `report_markdown`(report 성공 시, 아니면 null), `key_actions`(KeyAction 배열\|null), `key_actions_total`(int\|null) | run 종료 시 항상 1회 |
 
@@ -337,8 +338,12 @@ data: {"seq": 3, "ts": "2026-04-15 10:00:02", "agent": "dispatching"}
 - 기존 설계의 `report_done`은 `run_end`로 통합 — 실패로 끝나도 대시보드가
   종료를 알 수 있도록 "종료는 항상 run_end 1회" 규칙이 더 안전하다
 - `sensor_update`/`sensor_alert`는 단계 10 MQTT 센서 스트림 이벤트다. payload 검증과 임계치 판정은
-  `src/sensors/rules.py` 코드가 수행하며 LLM은 관여하지 않는다. `auto_run_triggered`는 단계 11
-  자동 Supervisor 트리거에서 별도 추가한다.
+  `src/sensors/rules.py` 코드가 수행하며 LLM은 관여하지 않는다.
+- `auto_run_triggered`는 단계 11 자동 Supervisor 트리거 이벤트다. 트리거 판정(쿨다운 포함)과
+  query 문구는 전부 코드가 만든다 (LLM 개입 없음). 실행 중인 run이 있으면 트리거는 폐기되며
+  이 이벤트도 발행되지 않는다. 이 이벤트는 새 run의 `run_start` **직전**에 발행되므로
+  run buffer replay에는 남지 않는다 (순서 보장 2 "run_start가 첫 이벤트"는 buffer 기준 유지) —
+  live 구독 중인 대시보드만 수신하고, 타임라인은 자동 실행 시 이 엔트리를 리셋에서 보존한다.
 
 ### 2-2. 상태 정의 (대시보드 아키텍처 뷰의 유일한 기준)
 

@@ -7,6 +7,7 @@
   - 2026-07-07: 색상을 styles/tokens.css 변수로 교체
   - 2026-07-07: 다크 콘솔 스타일 재작성 — 레일 도트·시각 분리·workflow 이벤트 요약 추가
   - 2026-07-14: 단계 10 sensor_alert 요약 문구 추가 (sensor_update는 타임라인 미수집)
+  - 2026-07-16: 단계 11 auto_run_triggered 요약 + run_start mode:"auto" "자동 실행" 배지
 -->
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
@@ -62,6 +63,8 @@ function summarize(entry: TimelineEntry): string {
       return `${data.action_id} · ${data.escalation_reason}`;
     case "sensor_alert":
       return `${data.line} ${data.sensor} · ${data.rule} (${(data.values as number[]).join(" → ")} ${data.unit})`;
+    case "auto_run_triggered":
+      return `${data.line} · ${data.query}`;
     case "error":
       return `${data.agent ?? "-"} · ${data.message}`;
     case "run_end":
@@ -79,6 +82,16 @@ function summarize(entry: TimelineEntry): string {
  */
 function timeOf(ts: string): string {
   return ts.length >= 19 ? ts.slice(11, 19) : ts;
+}
+
+/**
+ * 센서 자동 트리거로 시작된 run_start인지 판별한다 (docs/sensor-stream.md "자동 실행" 배지).
+ *
+ * @param entry 수신 이벤트 1건
+ * @returns run_start이면서 mode가 "auto"이면 true
+ */
+function isAutoRun(entry: TimelineEntry): boolean {
+  return entry.event === "run_start" && (entry.data as EventDataMap["run_start"]).mode === "auto";
 }
 </script>
 
@@ -102,6 +115,7 @@ function timeOf(ts: string): string {
             <span class="rail-dot" aria-hidden="true"></span>
             <time class="ts">{{ timeOf(entry.data.ts) }}</time>
             <span class="event">{{ entry.event }}</span>
+            <span v-if="isAutoRun(entry)" class="badge-auto">자동 실행</span>
             <span class="summary-text">{{ summarize(entry) }}</span>
             <span class="seq">#{{ String(entry.data.seq).padStart(2, "0") }}</span>
           </summary>
@@ -181,6 +195,18 @@ summary:hover {
   font-size: 0.66rem;
   opacity: 0.7;
 }
+.badge-auto {
+  flex: none;
+  align-self: center;
+  padding: 0.06rem 0.42rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
 .payload {
   margin: 0.15rem 0.9rem 0.5rem 2rem;
   padding: 0.55rem 0.75rem;
@@ -213,6 +239,12 @@ summary:hover {
 }
 .entry[data-event="tool_call"] .rail-dot {
   background: var(--ink-sub);
+}
+.entry[data-event="auto_run_triggered"] .rail-dot {
+  background: var(--status-warning);
+}
+.entry[data-event="auto_run_triggered"] .event {
+  color: var(--status-warning);
 }
 .entry[data-event="action_proposed"] .rail-dot,
 .entry[data-event="action_reproposed"] .rail-dot,

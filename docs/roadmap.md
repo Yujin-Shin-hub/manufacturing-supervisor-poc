@@ -20,8 +20,8 @@
 | 7 | FastAPI `server.py` + SSE `/events` + `/run` | curl로 SSE 이벤트 수신 확인 | ✅ |
 | 8 | `frontend/` Vue 3 대시보드 (Vite+TS, 파이프라인 그래프·이벤트 스트림·리포트·알림/HITL) | dev proxy로 실행 과정 재생 + `npm run build` 후 FastAPI 단독 서빙 확인 | ✅ |
 | 9 | README 갱신 + 결과물 커밋 | 리포트 예시 2건 + 대시보드 리포트 drawer 스크린샷을 `reports/`에 커밋 | ✅ |
-| 10 | MQTT 센서 스트림 — 시뮬레이터 + Mosquitto + 구독자 + 대시보드 센서 패널 | 이상 주입 시나리오가 대시보드에 실시간 표시 | ⬜ |
-| 11 | 센서 이상 → Supervisor 자동 트리거 (rules.py, 쿨다운 포함) | temp-drift 데모에서 자동 실행이 타임라인에 기록됨 | ⬜ |
+| 10 | MQTT 센서 스트림 — 시뮬레이터 + Mosquitto + 구독자 + 대시보드 센서 패널 | 이상 주입 시나리오가 대시보드에 실시간 표시 | ✅ |
+| 11 | 센서 이상 → Supervisor 자동 트리거 (rules.py, 쿨다운 포함) | temp-drift 데모에서 자동 실행이 타임라인에 기록됨 | ✅ |
 | 12 | (선택) SQLite 연동 — CSV를 `data/factory.db`로 적재, loader.py 내부만 교체 | 툴·에이전트 코드 수정 0줄로 전환 완료 | ⬜ |
 
 ## 구현 방향 정리
@@ -88,6 +88,8 @@
 - `docs/service_concept.md` 기준 서비스 범위는 Etch 공정군 내 Lot 우선순위 및 설비 배정 재조정 PoC로 적절하다.
 - `docs/roadmap.md`의 큰 흐름은 서비스 컨셉과 일치한다.
 - `src/`, `tests/`, `reports/`, `process.md` 골격 생성, 단계 1 tools 구현, 단계 2 schemas/LLM 검증 래퍼, 단계 3 Routing Agent, 단계 4 Worker 4종, 단계 5 report Worker + Supervisor 조립, 단계 6 CLI + EventBus, 단계 7 FastAPI/SSE, 단계 8 Vue 대시보드, 단계 9 README/증빙 산출물 커밋은 완료됐다.
+- 단계 10 (MQTT 센서 스트림)은 완료됐다 — `src/sensors/`(simulator·subscriber·rules) + `SensorPanel.vue` 센서 패널, temp-drift E2E 검증 증빙은 `reports/dashboard-stage10-sensor-panel.png` (상세: `docs/sensor-stream.md` 구현 상태 절).
+- 단계 11 (센서 자동 트리거)은 완료됐다 — 라인당 5분 쿨다운·mode "auto"·auto_run_triggered 이벤트·타임라인 "자동 실행" 배지. temp-drift E2E 증빙은 `reports/stage11-auto-trigger-events.log`. 자동 트리거는 데모용 단순 임계치 규칙이며, 추후 ML 기반 예측(예상 이상 감지) 트리거로 확장할 계획이다 (README 한계·확장 여지 참고).
 - `notebooks/01-monitoring-agents.ipynb`, `notebooks/02-supervisor-report.ipynb`는 CrewAI 기반 초기 프로토타입이며, 수정 대상이 아니라 이관 참고 자료다.
 
 ## 의존성 추가 기록

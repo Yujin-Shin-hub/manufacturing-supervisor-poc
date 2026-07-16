@@ -9,6 +9,8 @@
                 in-memory ActionRegistry 추가 (repropose/escalate는 계약만 유지)
   - 2026-07-14: GET /api/risk-summary 추가 — KPI가 risk_alert Worker와 같은
                 score_delay_risk(asof) 집계를 쓰도록 (대시보드-리포트 수치 정합, api-spec 1-3)
+  - 2026-07-16: 단계 11 센서 자동 트리거 — sensor_alert 수신 시 쿨다운(라인당 5분) 판정 후
+                Supervisor를 mode "auto"로 실행. 수동 실행 중이면 폐기 (docs/sensor-stream.md)
 
 """
 
@@ -30,6 +32,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from src.events import EventBus, EventRecord
 from src.main import DEFAULT_ASOF
+from src.sensors.rules import AutoTriggerCooldown, SensorType, build_auto_query
 from src.sensors.subscriber import MqttSensorSubscriber, mqtt_enabled
 from src.schemas import StrictModel
 from src.supervisor import Supervisor
@@ -173,6 +176,9 @@ run_state: RunState = RunState()
 action_registry: ActionRegistry = ActionRegistry()
 event_bus.subscribe(action_registry.track)
 sensor_subscriber: MqttSensorSubscriber | None = None
+auto_trigger_cooldown: AutoTriggerCooldown = AutoTriggerCooldown()
+# paho-mqtt 콜백 스레드에서 자동 실행 코루틴을 스케줄링하기 위한 서버 event loop 참조
+main_loop: asyncio.AbstractEventLoop | None = None
 
 FRONTEND_DIST: Path = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 if FRONTEND_DIST.exists():
@@ -184,11 +190,13 @@ if FRONTEND_DIST.exists():
 
 
 @app.on_event("startup")
-def startup_mqtt_subscriber() -> None:
-    """MQTT_ENABLED=true이면 Mosquitto 센서 topic 구독을 시작한다."""
-    global sensor_subscriber
+async def startup_mqtt_subscriber() -> None:
+    """MQTT_ENABLED=true이면 Mosquitto 센서 topic 구독과 자동 트리거를 시작한다."""
+    global sensor_subscriber, main_loop
+    main_loop = asyncio.get_running_loop()
     if not mqtt_enabled():
         return
+    event_bus.subscribe(_handle_sensor_alert)
     sensor_subscriber = MqttSensorSubscriber(event_bus=event_bus)
     sensor_subscriber.start()
 
@@ -198,6 +206,64 @@ def shutdown_mqtt_subscriber() -> None:
     """서버 종료 시 MQTT loop를 정리한다."""
     if sensor_subscriber is not None:
         sensor_subscriber.stop()
+
+
+def _handle_sensor_alert(event: EventRecord) -> None:
+    """sensor_alert 이벤트를 받아 자동 실행 코루틴을 서버 event loop에 스케줄링한다.
+
+    paho-mqtt 콜백 스레드에서 호출되므로 여기서는 스케줄링만 하고,
+    실행 가능 판정(수동 실행 여부·쿨다운)은 event loop 안의 `_maybe_auto_run`이 담당한다.
+
+    Args:
+        event: EventBus가 발행한 이벤트 레코드. sensor_alert 외에는 무시한다.
+
+    Returns:
+        None.
+    """
+    if event.event != "sensor_alert" or main_loop is None:
+        return
+    line = str(event.data["line"])
+    sensor: SensorType = event.data["sensor"]
+    asyncio.run_coroutine_threadsafe(_maybe_auto_run(line=line, sensor=sensor), main_loop)
+
+
+async def _maybe_auto_run(*, line: str, sensor: SensorType) -> None:
+    """자동 트리거 판정 후 Supervisor를 mode "auto"로 실행한다 (docs/sensor-stream.md).
+
+    - 수동/자동 run이 이미 실행 중이면 트리거를 **폐기**한다 (대기열 없음 —
+      run이 끝난 뒤 최신 센서 상태로 다시 판정하는 것이 맞다).
+    - 라인당 5분 쿨다운을 통과해야 실행한다. 폐기된 트리거는 쿨다운을 소모하지 않는다.
+
+    Args:
+        line: sensor_alert가 발생한 라인 식별자.
+        sensor: sensor_alert가 발생한 센서 종류.
+
+    Returns:
+        None.
+    """
+    async with run_state.lock:
+        if run_state.running:
+            return
+        if not auto_trigger_cooldown.allow(line):
+            return
+        run_state.running = True
+
+    query = build_auto_query(line, sensor)
+    event_bus.publish("auto_run_triggered", cause="sensor_alert", line=line, query=query)
+    try:
+        await asyncio.to_thread(
+            Supervisor(event_bus=event_bus).run,
+            "auto",
+            DEFAULT_ASOF,
+            query,
+            None,
+        )
+    except Exception:
+        # Supervisor가 error/run_end(failed) 이벤트를 이미 발행했다 — 자동 실행은 재던지지 않는다.
+        pass
+    finally:
+        async with run_state.lock:
+            run_state.running = False
 
 
 @app.get("/", response_class=HTMLResponse)

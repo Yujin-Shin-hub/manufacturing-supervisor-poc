@@ -8,6 +8,8 @@
  *   - 2026-07-14: run_end.key_actions 수신 — 리포트 드로어 고정 컴포넌트용 상태 추가
  *   - 2026-07-14: 단계 10 — sensor_update는 초당 최대 18건이라 타임라인에서 제외
  *                 (센서 패널이 전용 표시 계층, sensor_alert는 타임라인 유지)
+ *   - 2026-07-16: 단계 11 — 자동 실행(run_start mode:"auto") 시 직전 auto_run_triggered
+ *                 엔트리를 타임라인 리셋에서 보존 (트리거 원인이 타임라인에 남도록)
  */
 import { onBeforeUnmount, onMounted, reactive, ref, type Ref } from "vue";
 
@@ -87,9 +89,15 @@ export function useEventStream(onEvent?: EventHook): EventStreamState {
 
     switch (event) {
       case "run_start": {
+        const start = data as EventDataMap["run_start"];
         runStatus.value = "RUNNING";
         for (const key of NODE_KEYS) nodes[key] = "PENDING";
-        timeline.value = [{ event, data }];
+        // 자동 실행이면 트리거 기록(auto_run_triggered)을 리셋에서 살려 원인을 남긴다
+        const trigger =
+          start.mode === "auto"
+            ? timeline.value.filter((entry) => entry.event === "auto_run_triggered").slice(-1)
+            : [];
+        timeline.value = [...trigger, { event, data }];
         reportMarkdown.value = null;
         keyActions.value = [];
         keyActionsTotal.value = 0;

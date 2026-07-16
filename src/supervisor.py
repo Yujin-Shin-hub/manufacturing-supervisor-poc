@@ -11,6 +11,8 @@
                 (original_machine·impact·efficiency_gain, api-spec 2-1)
   - 2026-07-14: 대시보드 리포트 A안 — run_end에 key_actions/key_actions_total 필드 추가
                 (드로어 고정 컴포넌트용 구조화 데이터, api-spec 2-1 동시 갱신)
+  - 2026-07-16: 단계 11 mode "auto" 허용 — 센서 자동 트리거 전용. ask와 동일하게
+                고정 템플릿 query를 라우팅하되 run_start에 mode:"auto"로 구분 기록
 """
 
 from __future__ import annotations
@@ -79,16 +81,18 @@ class Supervisor:
         """실행 모드에 맞는 Worker를 순차 실행하고 최종 Report를 반환한다.
 
         Args:
-            mode: 실행 모드. `"report"` 또는 `"ask"`만 허용한다.
+            mode: 실행 모드. `"report"`, `"ask"`, `"auto"`만 허용한다.
+                `"auto"`는 센서 자동 트리거 전용으로, 고정 템플릿 query를 ask와
+                동일한 라우팅 경로로 처리한다 (POST /run에는 노출하지 않는다).
             asof: 데이터 조회와 리포트 생성 기준시각 문자열.
-            query: ask mode에서 라우팅에 사용할 사용자 질문. report mode에서는 None.
+            query: ask/auto mode에서 라우팅에 사용할 질문. report mode에서는 None.
             llm_provider: 라우팅 LLM provider 선택값. `"auto"`, `"qwen"`, `"openai"` 중 하나.
 
         Returns:
             Worker 결과를 취합한 최종 Report.
 
         Raises:
-            ValueError: mode가 허용값이 아니거나 ask mode에서 query가 비어 있을 때.
+            ValueError: mode가 허용값이 아니거나 ask/auto mode에서 query가 비어 있을 때.
             Exception: report Worker 실행 실패처럼 복구 불가능한 오류가 발생할 때.
         """
         if self._event_bus:
@@ -106,12 +110,12 @@ class Supervisor:
                 execution_order="sequential",
                 reason="report mode fixed worker order",
             )
-        elif normalized_mode == "ask":
+        elif normalized_mode in {"ask", "auto"}:
             if not query or not query.strip():
                 self._publish(
                     "error",
                     agent=None,
-                    message="query is required when mode='ask'",
+                    message=f"query is required when mode='{normalized_mode}'",
                     recoverable=False,
                 )
                 self._publish(
@@ -121,7 +125,7 @@ class Supervisor:
                     key_actions=None,
                     key_actions_total=None,
                 )
-                raise ValueError("query is required when mode='ask'")
+                raise ValueError(f"query is required when mode='{normalized_mode}'")
             decision = router.route(query, provider=llm_provider)
             target_agents = self._with_policy_agent(list(decision.target_agents))
             report_query = query
@@ -135,7 +139,7 @@ class Supervisor:
             self._publish(
                 "error",
                 agent=None,
-                message="mode must be one of: report, ask",
+                message="mode must be one of: report, ask, auto",
                 recoverable=False,
             )
             self._publish(
@@ -145,7 +149,7 @@ class Supervisor:
                 key_actions=None,
                 key_actions_total=None,
             )
-            raise ValueError("mode must be one of: report, ask")
+            raise ValueError("mode must be one of: report, ask, auto")
 
         results = [
             self._run_worker(agent_name, asof=asof, query=report_query)

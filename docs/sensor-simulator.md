@@ -100,7 +100,7 @@ payload: {"ts": "2026-07-15T23:17:39", "line": "Line-2",
 
 ## 문제 — 해결 — 결과 메모
 
-구현·검증 과정에서 실제로 걸렸던 것들이다.
+> 구현·검증 과정에서 troubleshooting
 
 ### 1. paho-mqtt 2.x에서 `mqtt.Client()` 시그니처가 바뀜
 

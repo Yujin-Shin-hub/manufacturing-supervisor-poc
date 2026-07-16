@@ -10,6 +10,7 @@
  *                 연속 모달로 이어지던 문제 해소 (건들은 PENDING으로 제안 큐·알림센터에 유지)
  *   - 2026-07-14: 단계 10 sensor_alert 알림 연동 — 지속 이상 시 서버가 ~3초마다 재발행하므로
  *                 라인·센서별 60초 스로틀로 토스트·알림센터 스팸을 막는다 (카드 경고색은 매번 갱신)
+ *   - 2026-07-16: 단계 11 auto_run_triggered 알림·토스트 추가 (서버 쿨다운이 재발행을 막는다)
  */
 import { computed, ref, type ComputedRef, type Ref } from "vue";
 
@@ -342,6 +343,18 @@ export function useNotifications(): NotificationCenterState {
           `${alert.line} ${alert.sensor} 임계 초과`,
           `${alert.rule} — ${valuesText} ${alert.unit}`,
         );
+        break;
+      }
+      case "auto_run_triggered": {
+        // 자동 트리거는 서버 쿨다운(라인당 5분)이 걸려 있어 별도 스로틀이 필요 없다
+        const triggered = data as EventDataMap["auto_run_triggered"];
+        pushItem(
+          "warning",
+          `자동 실행 · ${triggered.line}`,
+          `${triggered.cause} → ${triggered.query}`,
+          triggered.ts,
+        );
+        pushToast("warning", `${triggered.line} 자동 실행 시작`, triggered.query);
         break;
       }
       case "error": {

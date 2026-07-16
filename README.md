@@ -116,6 +116,10 @@ flowchart LR
 - `MQTT_ENABLED=true`일 때 FastAPI startup에서 subscriber를 시작
 - 대시보드 **센서 스트림 패널**: 라인별 최신값 + 최근 60초 스파크라인(vanilla canvas),
   `sensor_alert` 수신 시 해당 라인 카드 경고색 토글 + critical 토스트(라인·센서당 60초 스로틀).
+- **센서 이상 → Supervisor 자동 트리거**: `sensor_alert`가 쿨다운(라인당 5분)을 통과하면
+  `auto_run_triggered` 이벤트 발행 후 Supervisor가 고정 템플릿 질의로 자동 실행됩니다
+  (`run_start mode:"auto"` — 타임라인에 "자동 실행" 배지로 구분 표시). 수동 실행 중 도착한
+  트리거는 대기열 없이 폐기됩니다. E2E 증빙: [stage11-auto-trigger-events.log](reports/stage11-auto-trigger-events.log)
 
 ![sensor stream panel — Line-2 temp-drift alert](reports/dashboard-stage10-sensor-panel.png)
 
@@ -128,18 +132,46 @@ MQTT_ENABLED=true uvicorn src.server:app --port 8000
 python -m src.sensors.simulator --anomaly temp-drift   # 별도 터미널
 ```
 
-자동 트리거 규칙은 예지보전 모델이 아니라 데모용 단순 임계치이며,
-`auto_run_triggered`(센서 이상 → Supervisor 자동 실행)는 단계 11 범위로 남아 있습니다.
+**확장 방향** — 현재 자동 트리거는 임계치 초과에 반응하는 룰 기반(코드 판정)입니다.
+여기에 머신러닝 기반 이상 예측 모델을 얹어, 임계치를 넘기 전 **예상 이상이 감지되는 시점**에
+Supervisor를 선제적으로 자동 트리거하는 방식으로 개선할 계획입니다
+(배경 테이블 `delay_history`, `historical_ct` 등이 학습 데이터 후보입니다).
 
 ## 데이터 (`data/`)
 
-| 파일 | 내용 |
-|---|---|
-| schedule_master.csv | 생산 스케줄 허브 |
-| work_status.csv | 설비·작업 현황 |
-| delay_risk.csv | 지연 위험 분석 |
-| reschedule_action.csv | 스케줄 재조정 제안/이력 |
-| machine_process_map.csv | process_step별 배정 가능 설비/레시피/가용성 매핑 |
+전부 `data/generate_dataset.py`가 만든 **합성 데이터**이며, 기준시각 2026-04-15 14:00의
+Etch 공정군 상황을 스냅샷으로 담고 있습니다 (명세: `data/README_dataset.txt`).
+내장 이상상황(ETCH-105 정지, ETCH-103 점검중, CRITICAL 위험 등)이 시나리오로 심어져 있어
+같은 데이터로 데모가 항상 재현됩니다.
+
+**핵심 테이블 5종** — 에이전트와 조회 API(`/api/*`)가 사용합니다.
+
+| 파일 | 행 | 내용 | 주 사용처 |
+|---|---|---|---|
+| schedule_master.csv | 100 | 생산 스케줄 허브 — 작업별 `process_step`, 배정 설비, 납기, 우선순위, 상태 | field_status · delay_pred · 납기 위험 판정 |
+| work_status.csv | 100 | 설비·작업 현황 — 설비 상태, 부하율, 작업자, 불량/산출량 | field_status · dispatching |
+| delay_risk.csv | 100 | 지연 위험 분석 — `risk_score`/등급, 지연 확률, 예상 지연시간, 감지 시각 | risk_alert · delay_pred · 리스크 추이 차트 |
+| reschedule_action.csv | 53 | 재조정 액션 제안/이력 — 원설비→대체설비, `applied_yn` 승인 이력 | dispatching · scheduling_policy (이력 승인률·품질 risk 검증) |
+| machine_process_map.csv | 12 | `process_step`별 배정 가능 설비 — qualification, 선호순위, setup time, 가용성 | dispatching 후보 탐색 |
+
+**배경 테이블 9종** — SI 제안서 구조의 라인 운영 데이터로, 시나리오의 맥락을 구성합니다.
+현재 에이전트 코드는 읽지 않으며, api-spec 스코프 가드에 따라 API로도 노출하지 않습니다
+(이력 분석·예측 고도화 확장용).
+
+| 파일 | 행 | 내용 |
+|---|---|---|
+| production_plan.csv | 6 | 일자·시프트별 PO 생산 목표 (수량, 납기, 고객 등급) |
+| work_event_log.csv | 143 | 작업 시작/완료/이상 이벤트 로그 |
+| real_time_production.csv | 246 | PO별 누적 생산량·진척률 스냅샷 |
+| delay_history.csv | 240 | 과거 지연 사유·심각도·해결 시간 이력 |
+| historical_ct.csv | 1,440 | SKU × 공정별 일자별 CT(사이클타임) 실적 |
+| line_assignment.csv | 48 | PO의 라인·작업자·계획 시작/종료 배정 |
+| line_master.csv | 15 | 라인/존 마스터 — 스테이션 수, 일 생산능력, 가동 상태 |
+| process_master.csv | 48 | SKU별 공정 순서·표준 CT·버퍼·요구 스킬 |
+| operator_master.csv | 7 | 작업자 스킬 레벨·담당 존·시프트·인증 공정 |
+
+데이터 접근은 전부 `src/tools/loader.py`를 경유합니다 — 에이전트·툴이 CSV를 직접 열지 않으므로
+저장소를 교체(CSV→SQLite)해도 loader 내부만 바꾸면 됩니다.
 
 ## 실행
 
@@ -176,3 +208,4 @@ uvicorn src.server:app --host 127.0.0.1 --port 8000
 - 합성 데이터 기반 PoC이며 실공정 연동·상용 운영 검증은 하지 않았습니다
 - 전공정 전체 Fab Scheduler가 아니라 Etch 공정군 단위 리스케줄링 PoC입니다
 - 지연 위험 점수와 효율 개선율은 룰 기반 합성 값이며, 실제 운영 검증은 하지 않았습니다
+- MQTT 브로커는 인증/TLS 없이 로컬 데모 한정으로 사용합니다

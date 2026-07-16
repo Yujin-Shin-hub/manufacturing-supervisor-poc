@@ -746,3 +746,47 @@ SSE는 연결 유지형 스트림이므로 검증용 curl은 `--max-time` 종료
 - EventSource 재접속 replay와 고빈도 텔레메트리가 겹치면 재접속 시 수천 건이 한 번에
   들어온다 — 타임라인 제외가 없으면 페이지 복귀가 눈에 띄게 느려진다
 - canvas 스파크라인은 devicePixelRatio 보정(물리 픽셀 리사이즈) 없이는 HiDPI에서 흐릿하다
+
+## 단계 11 - 센서 이상 → Supervisor 자동 트리거 (쿨다운 포함)
+
+### 산출물
+
+- `src/sensors/rules.py`: `AutoTriggerCooldown`(라인당 5분, allow 통과 시점에만 소모) +
+  `build_auto_query` 고정 query 템플릿 (센서종별 문구 — 판정·문구 모두 코드, LLM 개입 없음)
+- `src/events.py`: `auto_run_triggered` 이벤트 추가 (cause·line·query) + 콘솔 로거 케이스
+- `src/supervisor.py`: mode `"auto"` 허용 — ask와 동일 라우팅 경로, run_start에 mode:"auto" 기록
+- `src/server.py`: sensor_alert 구독 → paho 스레드에서 `run_coroutine_threadsafe`로
+  `_maybe_auto_run` 스케줄링. 실행 중이면 폐기, 쿨다운 통과 시 auto_run_triggered 발행 후
+  Supervisor 실행. POST /run에는 "auto"를 노출하지 않는다 (RunRequest는 ask/report 유지)
+- frontend: `types/events.ts` AutoRunTriggeredData·mode "auto", 타임라인 "자동 실행" 배지,
+  run_start 리셋에서 직전 auto_run_triggered 엔트리 보존, 알림센터/토스트 연동
+- 테스트 6건 추가 (`tests/test_sensor_stream.py`) — 쿨다운·템플릿·auto 모드·폐기·쿨다운 미소모
+- 증빙: `reports/stage11-auto-trigger-events.log` (temp-drift E2E, 42 pytest 통과, 프론트 빌드 통과)
+
+### 검증
+
+- Mosquitto + temp-drift 시뮬레이터 + `MQTT_ENABLED=true` 서버로 실동작 E2E:
+  sensor_alert(3연속 초과) → auto_run_triggered → run_start mode:"auto"(고정 query) →
+  워커 실행 → run_end(done). 이후 지속 이상으로 sensor_alert가 ~90건 재발행되는 동안
+  재트리거 없다가 정확히 5분 뒤 두 번째 auto_run_triggered 발생 — 쿨다운 실증
+- E2E 중 LLM(Qwen 로컬 엔드포인트)이 연결 거부 상태여서 라우팅이 field_status로
+  fallback했다 — 파이프라인은 partial failure 설계대로 done으로 완주 (LLM 서버 기동 시
+  risk_alert/dispatching 라우팅으로 동작)
+
+### 핵심 설계 결정
+
+- 트리거 실행 판정(실행 중 여부·쿨다운)은 서버 event loop 안 `_maybe_auto_run`에서
+  run_state.lock으로 직렬화 — paho 스레드와 수동 /run의 race를 한 임계구역으로 해소
+- 수동 실행 중 도착한 트리거는 대기열이 아니라 폐기 (run 종료 후 최신 센서 상태로 재판정이
+  맞다), 폐기된 트리거는 쿨다운을 소모하지 않는다 (직후 재트리거 가능해야 하므로)
+- auto_run_triggered는 run_start 직전(EventBus reset 전)에 발행 → buffer replay에는 없고
+  live 구독만 수신. "run_start가 buffer 첫 이벤트" 순서 보장은 유지되고, 타임라인은
+  자동 실행 시 해당 엔트리를 리셋에서 보존해 트리거 원인을 남긴다
+- mode "auto"는 Supervisor 내부 전용 — POST /run 스키마에 넣지 않아 사용자가 쿨다운을
+  우회한 자동 모드 실행을 만들 수 없다
+
+### 필요 지식 정리
+
+- paho-mqtt 콜백 스레드에서 FastAPI의 asyncio 세계로 넘어가려면 startup에서
+  `asyncio.get_running_loop()`를 잡아두고 `run_coroutine_threadsafe`를 써야 한다
+- asyncio.Lock은 이벤트 루프에 늦게 바인딩되므로 모듈 전역 생성 + `asyncio.run` 테스트가 안전하다
